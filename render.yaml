@@ -55,4 +55,4 @@ services:
 databases:
   - name: classroom-db
     databaseName: kpihelper
-    user: postgres
+
