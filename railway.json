@@ -4,7 +4,7 @@
         "builder": "NIXPACKS"
     },
     "deploy": {
-        "startCommand": "docker-compose up",
+        "startCommand": "cd bot && python bot.py",
         "restartPolicyType": "ON_FAILURE",
         "restartPolicyMaxRetries": 10
     }
