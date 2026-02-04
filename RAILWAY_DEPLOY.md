@@ -1,161 +1,145 @@
-# 🚂 Deployment на Railway.app
+# 🚂 Railway Deployment - ОНОВЛЕНА ІНСТРУКЦІЯ
 
-## Крок 1: Створи акаунт на Railway
+## ❗ Важлива зміна
+
+Railway не підтримує Docker Compose безпосередньо. Потрібно створити **3 окремі сервіси**.
+
+## 📋 Покрокова інструкція
+
+### Крок 1: Створи проект на Railway
 
 1. Зайди на https://railway.app/
-2. Зареєструйся через GitHub
-3. Підтверди email
+2. Натисни **"New Project"**
+3. Вибери **"Deploy from GitHub repo"**
+4. Вибери репозиторій **Helper**
 
-## Крок 2: Отримай Telegram Bot Token
+### Крок 2: Додай PostgreSQL
 
-1. Відкрий Telegram, знайди @BotFather
-2. Надішли команду `/newbot`
-3. Слідуй інструкціям
-4. Скопіюй токен (виглядає як `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`)
+1. В проекті натисни **"New"**
+2. Вибери **"Database"** → **"PostgreSQL"**
+3. Railway автоматично створить базу даних
+4. Скопіюй `DATABASE_URL` зі змінних
 
-## Крок 3: Налаштуй Google Cloud Project
+### Крок 3: Налаштуй Bot Service (головний)
 
-1. Зайди на https://console.cloud.google.com/
-2. Створи новий проект
-3. Увімкни **Google Classroom API**
-4. Іди в **APIs & Services > Credentials**
-5. Створи **OAuth 2.0 Client ID** (Web application)
-6. В **Authorized redirect URIs** додай:
+Перший сервіс вже створений з GitHub. Налаштуй його:
+
+1. **Settings** → **Root Directory**: залиш порожнім
+2. **Variables** - додай:
    ```
-   https://your-project-name.up.railway.app/auth/callback
+   BOT_TOKEN=твій_токен
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   GOOGLE_CLIENT_ID=твій_client_id
+   GOOGLE_CLIENT_SECRET=твій_secret
+   REDIRECT_URI=https://твій-проект.up.railway.app/auth/callback
    ```
-   (замість `your-project-name` буде твоя назва проекту на Railway)
-7. Скопіюй **Client ID** та **Client Secret**
 
-## Крок 4: Deploy на Railway
+### Крок 4: Створи Checker Service
 
-### Варіант A: Через GitHub (РЕКОМЕНДОВАНО)
-
-1. **Створи новий проект на Railway:**
-   - Натисни "New Project"
-   - Вибери "Deploy from GitHub repo"
-   - Вибери репозиторій `Helper`
-
-2. **Додай PostgreSQL:**
-   - Натисни "New Service"
-   - Вибери "Database"
-   - Вибери "PostgreSQL"
-   - Railway автоматично створить базу даних
-
-3. **Налаштуй Environment Variables:**
-   
-   В налаштуваннях проекту додай змінні:
-   
+1. Натисни **"New"** → **"GitHub Repo"**
+2. Вибери той самий репозиторій **Helper**
+3. **Settings**:
+   - **Service Name**: `checker`
+   - **Root Directory**: `checker`
+   - **Start Command**: `python checker.py`
+4. **Variables** (ті ж самі що в bot):
    ```
-   BOT_TOKEN=твій_токен_від_BotFather
-   GOOGLE_CLIENT_ID=твій_google_client_id
-   GOOGLE_CLIENT_SECRET=твій_google_client_secret
-   REDIRECT_URI=https://your-project-name.up.railway.app/auth/callback
+   BOT_TOKEN=${{bot.BOT_TOKEN}}
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   GOOGLE_CLIENT_ID=${{bot.GOOGLE_CLIENT_ID}}
+   GOOGLE_CLIENT_SECRET=${{bot.GOOGLE_CLIENT_SECRET}}
    ```
-   
-   Railway автоматично створить:
-   - `DATABASE_URL` (з PostgreSQL сервісу)
-   - `POSTGRES_USER`
-   - `POSTGRES_PASSWORD`
-   - `POSTGRES_DB`
 
-4. **Deploy:**
-   - Railway автоматично задеплоїть після push в GitHub
-   - Чекай ~2-3 хвилини
+### Крок 5: Створи OAuth Server Service
 
-### Варіант B: Через Railway CLI
+1. Натисни **"New"** → **"GitHub Repo"**
+2. Вибери **Helper**
+3. **Settings**:
+   - **Service Name**: `oauth-server`
+   - **Root Directory**: `oauth_server`
+   - **Start Command**: `python server.py`
+4. **Variables**:
+   ```
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   GOOGLE_CLIENT_ID=${{bot.GOOGLE_CLIENT_ID}}
+   GOOGLE_CLIENT_SECRET=${{bot.GOOGLE_CLIENT_SECRET}}
+   REDIRECT_URI=${{bot.REDIRECT_URI}}
+   ```
+5. **Networking**:
+   - **Generate Domain** - це дасть публічний URL для OAuth
 
-```bash
-# Встанови Railway CLI
-npm i -g @railway/cli
+### Крок 6: Оновлення REDIRECT_URI
 
-# Залогінься
-railway login
+Після створення всіх сервісів:
 
-# Ініціалізуй проект
-railway init
+1. OAuth Server отримає URL типу `https://oauth-server-production-xxxx.up.railway.app`
+2. **Онови `REDIRECT_URI`** в bot service на:
+   ```
+   https://oauth-server-production-xxxx.up.railway.app/auth/callback
+   ```
+3. **Онови в Google Cloud Console**:
+   - Іди в OAuth 2.0 Client
+   - Додай в Authorized redirect URIs:
+     ```
+     https://oauth-server-production-xxxx.up.railway.app/auth/callback
+     ```
 
-# Додай PostgreSQL
-railway add
+### Крок 7: Перевірка
 
-# Налаштуй змінні оточення
-railway variables set BOT_TOKEN=your_token
-railway variables set GOOGLE_CLIENT_ID=your_client_id
-railway variables set GOOGLE_CLIENT_SECRET=your_secret
-railway variables set REDIRECT_URI=https://your-app.up.railway.app/auth/callback
+1. Всі 4 сервіси повинні бути **Active** (зелені)
+2. Перевір логи кожного сервісу
+3. Відкрий бота в Telegram → `/start`
 
-# Deploy
-railway up
+## 🎯 Структура проекту на Railway
+
+```
+Railway Project
+├── bot (GitHub: Helper, root: /)
+├── checker (GitHub: Helper, root: checker/)
+├── oauth-server (GitHub: Helper, root: oauth_server/)
+└── PostgreSQL (Database)
 ```
 
-## Крок 5: Оновлення REDIRECT_URI
+## 📊 Очікуване використання
 
-Після першого deploy:
+- **Bot**: ~512MB RAM, завжди запущений
+- **Checker**: ~256MB RAM, запускається кожні 30 хв
+- **OAuth**: ~256MB RAM, тільки при OAuth
+- **PostgreSQL**: ~256MB RAM
 
-1. Railway дасть тобі URL: `https://your-app-name.up.railway.app`
-2. Скопіюй цей URL
-3. Іди в Google Cloud Console
-4. Онови **Authorized redirect URIs** на:
-   ```
-   https://your-app-name.up.railway.app/auth/callback
-   ```
-5. Онови змінну `REDIRECT_URI` на Railway
-
-## Крок 6: Перевірка
-
-1. Відкрий свого бота в Telegram
-2. Надішли `/start`
-3. Натисни `/connect`
-4. Пройди OAuth авторизацію
-5. Надішли `/sync`
+**Загалом**: ~1.5GB RAM - вкладається в $5 безкоштовних кредитів!
 
 ## 🔧 Troubleshooting
 
-### Бот не відповідає
-- Перевір логи на Railway: `Deployments > View Logs`
-- Перевір чи правильний `BOT_TOKEN`
+### Build fails
+- Перевір що `Root Directory` правильно встановлений
+- Перевір логи в Deployments
+
+### Bot не відповідає
+- Перевір BOT_TOKEN
+- Перевір що bot service запущений (зелений)
 
 ### OAuth не працює
-- Перевір `REDIRECT_URI` в Google Cloud і на Railway
-- Переконайся що Google Classroom API увімкнено
+- Переконайся що oauth-server має публічний домен
+- REDIRECT_URI повинен використовувати OAuth server URL, не bot URL
 
-### База даних не підключається
-- Railway автоматично створює `DATABASE_URL`
-- Перевір чи PostgreSQL сервіс запущений
+### База даних не підключається  
+- Використовуй `${{Postgres.DATABASE_URL}}` для автоматичного підключення
+- Не hardcode DATABASE_URL
 
-## 💰 Ціни
+## 💡 Важливо
 
-Railway надає:
-- **$5 безкоштовних кредитів щомісяця**
-- Цього вистачить для:
-  - 1 бот (bot service)
-  - 1 checker service
-  - 1 oauth_server
-  - PostgreSQL база даних
-  
-При невеликому використанні (~10-50 користувачів) - повністю безкоштовно!
+1. Кожен push в GitHub автоматично оновлює ВСІ 3 сервіси
+2. Змінні можна шарити між сервісами: `${{service.VARIABLE}}`
+3. Railway автоматично перезапускає сервіси при крашах
+4. Логи доступні в реальному часі для кожного сервісу
 
-## 🔄 Автоматичне оновлення
-
-Кожен `git push` в GitHub автоматично оновлює бота на Railway!
+## 🔄 Автодеплой
 
 ```bash
 git add .
-git commit -m "Update bot"
+git commit -m "Update"
 git push origin main
 ```
 
-## 📊 Моніторинг
-
-Railway Dashboard показує:
-- CPU/Memory usage
-- Логи в реальному часі
-- Статус кожного сервісу
-- Metrics та аналітика
-
-## ⚠️ Важливо
-
-1. **Ніколи не комітьте .env** в git!
-2. Всі секрети зберігай в Railway Environment Variables
-3. Після зміни змінних - перезапусти сервіси
-4. Регулярно перевіряй логи на помилки
+Всі 3 сервіси автоматично оновляться!

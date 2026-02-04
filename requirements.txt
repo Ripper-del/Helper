@@ -1,0 +1,9 @@
+aiogram==3.13.1
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+python-dotenv==1.0.1
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.149.0
+apscheduler==3.10.4
+icalendar==5.0.11
