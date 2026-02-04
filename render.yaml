@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: classroom-bot
+    env: docker
+    dockerfilePath: ./bot/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: classroom-db
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: REDIRECT_URI
+        value: https://classroom-oauth.onrender.com/auth/callback
+
+  - type: web
+    name: classroom-oauth
+    env: docker
+    dockerfilePath: ./oauth_server/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: classroom-db
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: REDIRECT_URI
+        sync: false
+
+  - type: worker
+    name: classroom-checker
+    env: docker
+    dockerfilePath: ./checker/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: classroom-db
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+databases:
+  - name: classroom-db
+    databaseName: kpihelper
+    user: postgres
