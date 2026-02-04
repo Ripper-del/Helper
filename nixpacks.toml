@@ -1,0 +1,9 @@
+[phases.setup]
+nixPkgs = ["python310", "postgresql"]
+aptPkgs = ["libpq-dev"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python bot/bot.py"
