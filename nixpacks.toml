@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python39"]
+nixPkgs = ["python310", "pip"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "cd bot && python bot.py"
+cmd = "python bot/bot.py"
