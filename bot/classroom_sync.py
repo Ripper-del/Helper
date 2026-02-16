@@ -23,7 +23,7 @@ def get_classroom_service(refresh_token: str):
     return build('classroom', 'v1', credentials=credentials)
 
 
-def fetch_all_deadlines(refresh_token: str):
+def fetch_all_deadlines(refresh_token: str, telegram_id: int):
     try:
         service = get_classroom_service(refresh_token)
         courses_response = service.courses().list(
@@ -55,7 +55,8 @@ def fetch_all_deadlines(refresh_token: str):
                 for work in coursework_list:
                     work_title = work.get('title', 'Без назви')
                     link = work.get('alternateLink', '')
-                    external_id = f"{course_id}_{work['id']}"
+                    # Uniqueness by user: telegram_id_course_id_work_id
+                    external_id = f"{telegram_id}_{course_id}_{work['id']}"
                     
                     # Проверяем наличие dueDate
                     if 'dueDate' not in work:
@@ -122,7 +123,7 @@ def sync_user_deadlines(user_id: int, telegram_id: int, google_token: str):
     """Синхронизация дедлайнов пользователя"""
     print(f"🔄 Синхронизация для user {telegram_id}...")
 
-    deadlines_data, coursework_no_deadline_data = fetch_all_deadlines(google_token)
+    deadlines_data, coursework_no_deadline_data = fetch_all_deadlines(google_token, telegram_id)
     
     # Получаем все курсы из Google Classroom
     try:
