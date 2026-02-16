@@ -25,6 +25,8 @@ class AddDeadlineStates(StatesGroup):
     waiting_for_course = State()
     waiting_for_title = State()
     waiting_for_date = State()
+    waiting_for_time = State()
+    waiting_for_link = State()
 
 
 def get_main_keyboard():
@@ -823,9 +825,9 @@ async def process_deadline_title(message: types.Message, state: FSMContext):
     ])
     
     await message.answer(
-        "📅 Введіть дату та час дедлайну:\n\n"
-        "Формат: ДД.ММ.РРРР ГГ:ХХ\n"
-        "Наприклад: 25.12.2026 23:59",
+        "📅 Введіть дату дедлайну:\n\n"
+        "Формат: ДД.ММ.РРРР\n"
+        "Наприклад: 25.12.2026",
         reply_markup=cancel_keyboard
     )
 
@@ -839,72 +841,180 @@ async def process_deadline_date(message: types.Message, state: FSMContext):
         return
 
     try:
-        # Парсинг даты
-        due_date = datetime.strptime(message.text.strip(), "%d.%m.%Y %H:%M")
-
-        # Получаем сохраненные данные
-        data = await state.get_data()
-        course_name = data.get('course_name')
-        title = data.get('title')
-
-        # Сохраняем в базу данных
-        telegram_id = message.from_user.id
-        db = get_db()
-
-        user = db.query(User).filter(User.telegram_id == telegram_id).first()
-        if not user:
-            await message.answer("❌ Помилка: користувач не знайдений. Спробуйте /start")
-            db.close()
-            await state.clear()
-            return
-
-        # Создаем уникальный external_id для ручного дедлайна
-        import time
-        external_id = f"manual_{telegram_id}_{int(time.time())}"
-
-        new_deadline = Deadline(
-            user_id=user.id,
-            course_name=course_name,
-            title=title,
-            due_date=due_date,
-            link=None,
-            external_id=external_id,
-            notified=False
-        )
-
-        db.add(new_deadline)
-        db.commit()
-        db.close()
-
-        await state.clear()
-
-        # Проверяем, активный или просроченный
-        now = datetime.utcnow()
-        if due_date >= now:
-            time_left = due_date - now
-            days_left = time_left.days
-            hours_left = time_left.seconds // 3600
-            time_str = f"{days_left} д. {hours_left} год." if days_left > 0 else f"{hours_left} год."
-            status = f"⏳ Залишилось: {time_str}"
-        else:
-            status = "⚠️ Увага: дедлайн вже прострочений!"
-
+        # Парсинг даты (только дата)
+        date_obj = datetime.strptime(message.text.strip(), "%d.%m.%Y")
+        await state.update_data(deadline_date=date_obj.strftime("%d.%m.%Y"))
+        
+        await state.set_state(AddDeadlineStates.waiting_for_time)
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⏩ Пропустити (23:59)", callback_data="skip_time")],
+            [InlineKeyboardButton(text="❌ Скасувати", callback_data="cancel_add_deadline")]
+        ])
+        
         await message.answer(
-            f"✅ Дедлайн успішно додано!\n\n"
-            f"📖 Предмет: {course_name}\n"
-            f"📝 Завдання: {title}\n"
-            f"⏰ Дедлайн: {due_date.strftime('%d.%m.%Y %H:%M')}\n"
-            f"{status}",
-            reply_markup=get_main_keyboard()
+            "⏰ Введіть час дедлайну (ГГ:ХХ):\n"
+            "Наприклад: 14:30\n\n"
+            "Або натисніть 'Пропустити' (буде встановлено 23:59)",
+            reply_markup=keyboard
         )
 
     except ValueError:
         await message.answer(
             "❌ Неправильний формат дати!\n\n"
-            "Використовуй формат: ДД.ММ.РРРР ГГ:ХХ\n"
-            "Наприклад: 25.12.2026 23:59\n\n"
-            "Спробуй ще раз або надішли /cancel для скасування."
+            "Використовуй формат: ДД.ММ.РРРР\n"
+            "Наприклад: 25.12.2026",
+            reply_markup=get_main_keyboard()
         )
+
+
+@dp.callback_query(F.data == "skip_time", AddDeadlineStates.waiting_for_time)
+async def skip_time_callback(callback_query: types.CallbackQuery, state: FSMContext):
+    """Пропуск ввода времени"""
+    await callback_query.answer()
+    await state.update_data(deadline_time="23:59")
+    await proceed_to_link(callback_query.message, state)
+
+
+@dp.message(AddDeadlineStates.waiting_for_time)
+async def process_deadline_time(message: types.Message, state: FSMContext):
+    """Обработка времени дедлайна"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Додавання дедлайну скасовано.", reply_markup=get_main_keyboard())
+        return
+
+    try:
+        # Валидация времени
+        datetime.strptime(message.text.strip(), "%H:%M")
+        await state.update_data(deadline_time=message.text.strip())
+        await proceed_to_link(message, state)
+    except ValueError:
+        await message.answer("❌ Неправильний формат часу! Введіть ГГ:ХХ (напр. 14:30) або натисніть кнопку пропуску.")
+
+
+async def proceed_to_link(message: types.Message, state: FSMContext):
+    """Переход к вводу ссылки"""
+    await state.set_state(AddDeadlineStates.waiting_for_link)
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⏩ Пропустити (без посилання)", callback_data="skip_link")],
+        [InlineKeyboardButton(text="❌ Скасувати", callback_data="cancel_add_deadline")]
+    ])
+    
+    await message.answer(
+        "🔗 Вставте посилання на завдання:\n"
+        "Можна відправити `https://...`\n\n"
+        "Або натисніть 'Пропустити'.",
+        reply_markup=keyboard
+    )
+
+
+@dp.callback_query(F.data == "skip_link", AddDeadlineStates.waiting_for_link)
+async def skip_link_callback(callback_query: types.CallbackQuery, state: FSMContext):
+    """Пропуск ввода ссылки"""
+    await callback_query.answer()
+    await finalize_deadline(callback_query.message, state, None)
+
+
+@dp.message(AddDeadlineStates.waiting_for_link)
+async def process_deadline_link(message: types.Message, state: FSMContext):
+    """Обработка ссылки"""
+    if message.text == "/cancel":
+        await state.clear()
+        await message.answer("❌ Додавання дедлайну скасовано.", reply_markup=get_main_keyboard())
+        return
+
+    link = message.text.strip()
+    # Простая проверка на URL
+    if not link.startswith("http"):
+        await message.answer("⚠️ Це не виглядає як посилання. Воно має починатися з http або https.\nСпробуйте ще раз або натисніть 'Пропустити'.")
+        return
+
+    await finalize_deadline(message, state, link)
+
+
+async def finalize_deadline(message: types.Message, state: FSMContext, link: str):
+    """Финализация и сохранение дедлайна"""
+    data = await state.get_data()
+    course_name = data.get('course_name')
+    title = data.get('title')
+    date_str = data.get('deadline_date')
+    time_str = data.get('deadline_time')
+    
+    # Собираем полный datetime
+    full_dt_str = f"{date_str} {time_str}"
+    try:
+        due_date = datetime.strptime(full_dt_str, "%d.%m.%Y %H:%M")
+    except ValueError:
+         await message.answer("❌ Помилка обробки дати. Спробуйте ще раз.")
+         await state.clear()
+         return
+
+    # Сохраняем в базу данных
+    # message может быть Message или отредактированное сообщение от callback
+    # Поэтому берем ID аккуратно
+    if isinstance(message, types.CallbackQuery): 
+        # Этого не должно быть, так как сюда передаем именно message объект
+        pass
+        
+    # В случае callback'а message это message объекта callback
+    telegram_id = message.chat.id # chat.id надежнее в данном контексте
+
+    db = get_db()
+    user = db.query(User).filter(User.telegram_id == telegram_id).first()
+    
+    if not user:
+        # Если юзер не найден, возможно он пишет впервые, но команда /start должна была создать
+        # Но на всякий случай
+        await message.answer("❌ Помилка: користувач не знайдений. Спробуйте /start")
+        db.close()
+        await state.clear()
+        return
+
+    # Создаем уникальный external_id для ручного дедлайна
+    import time
+    external_id = f"manual_{telegram_id}_{int(time.time())}"
+
+    new_deadline = Deadline(
+        user_id=user.id,
+        course_name=course_name,
+        title=title,
+        due_date=due_date,
+        link=link,
+        external_id=external_id,
+        notified=False
+    )
+
+    db.add(new_deadline)
+    db.commit()
+    db.close()
+
+    await state.clear()
+
+    # Проверяем, активный или просроченный
+    now = datetime.utcnow()
+    if due_date >= now:
+        time_left = due_date - now
+        days_left = time_left.days
+        hours_left = time_left.seconds // 3600
+        time_str = f"{days_left} д. {hours_left} год." if days_left > 0 else f"{hours_left} год."
+        status_msg = f"⏳ Залишилось: {time_str}"
+    else:
+        status_msg = "⚠️ Увага: дедлайн вже прострочений!"
+
+    display_link = f"\n🔗 <a href='{link}'>Посилання</a>" if link else ""
+
+    await message.answer(
+        f"✅ Дедлайн успішно додано!\n\n"
+        f"📖 Предмет: {course_name}\n"
+        f"📝 Завдання: {title}\n"
+        f"⏰ Дедлайн: {due_date.strftime('%d.%m.%Y %H:%M')}"
+        f"{display_link}\n"
+        f"{status_msg}",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML"
+    )
 
 
 async def main():

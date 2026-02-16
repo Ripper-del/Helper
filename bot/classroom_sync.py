@@ -35,7 +35,7 @@ def fetch_all_deadlines(refresh_token: str, telegram_id: int):
         all_deadlines = []
         all_coursework_no_deadline = []
 
-        print(f"🔍 Знайдено курсів: {len(courses)}")
+        # print(f"🔍 Знайдено курсів: {len(courses)}")
 
         for course in courses:
             course_id = course['id']
@@ -50,7 +50,8 @@ def fetch_all_deadlines(refresh_token: str, telegram_id: int):
                 coursework_list = coursework_response.get('courseWork', [])
 
                 if len(coursework_list) > 0:
-                    print(f"📘 Курс '{course_name}': {len(coursework_list)} завдань.")
+                    pass
+                    # print(f"📘 Курс '{course_name}': {len(coursework_list)} завдань.")
 
                 for work in coursework_list:
                     work_title = work.get('title', 'Без назви')
@@ -60,7 +61,7 @@ def fetch_all_deadlines(refresh_token: str, telegram_id: int):
                     
                     # Проверяем наличие dueDate
                     if 'dueDate' not in work:
-                        print(f"  ⚠️ Пропущено '{work_title}' - немає dueDate")
+                        # print(f"  ⚠️ Пропущено '{work_title}' - немає dueDate")
                         
                         # Сохраняем как coursework без дедлайна
                         coursework_data = {
@@ -93,7 +94,7 @@ def fetch_all_deadlines(refresh_token: str, telegram_id: int):
                         }
 
                         all_deadlines.append(deadline_data)
-                        print(f"  ✅ Додано дедлайн '{work_title}' - {due_date.strftime('%d.%m.%Y %H:%M')}")
+                        # print(f"  ✅ Додано дедлайн '{work_title}' - {due_date.strftime('%d.%m.%Y %H:%M')}")
                     
                     except KeyError as e:
                         print(f"  ❌ Помилка парсингу дедлайну '{work_title}': відсутнє поле {e}")
@@ -106,7 +107,7 @@ def fetch_all_deadlines(refresh_token: str, telegram_id: int):
                 traceback.print_exc()
                 continue
 
-        print(f"✅ Всього знайдено {len(all_deadlines)} дедлайнів та {len(all_coursework_no_deadline)} завдань без дедлайнів")
+        # print(f"✅ Всього знайдено {len(all_deadlines)} дедлайнів та {len(all_coursework_no_deadline)} завдань без дедлайнів")
         return all_deadlines, all_coursework_no_deadline
 
     except RefreshError:
@@ -205,6 +206,6 @@ def sync_user_deadlines(user_id: int, telegram_id: int, google_token: str):
     db.commit()
     db.close()
 
-    print(f"✅ User {telegram_id}: додано {added_count}, оновлено {updated_count}, завдань без дедлайнів: {coursework_added}")
+    # print(f"✅ User {telegram_id}: додано {added_count}, оновлено {updated_count}, завдань без дедлайнів: {coursework_added}")
     
     return added_count, updated_count, all_courses
