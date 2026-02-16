@@ -9,6 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from datetime import datetime
 from database import init_db, get_db, User, Deadline, Coursework
 from google_auth import get_authorization_url
+from google.auth.exceptions import RefreshError
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=BOT_TOKEN)
@@ -501,6 +502,18 @@ async def cmd_sync(message: types.Message):
             f"🔄 Оновлено: {updated_count}\n"
             f"📚 Знайдено курсів: {len(all_courses)}\n\n"
             f"Використайте кнопку '📚 Дедлайни' для перегляду!"
+        )
+    except RefreshError:
+        print(f"❌ Token expired for user {telegram_id}")
+        # Инвалидируем токен
+        user.google_token = None
+        db.commit()
+        
+        await message.answer(
+            "⚠️ <b>Термін дії доступу минув!</b>\n\n"
+            "Google вимагає повторного входу (зазвичай раз на 7 днів для тестових додатків).\n"
+            "Будь ласка, підключіться знову: /connect",
+            parse_mode="HTML"
         )
     except Exception as e:
         print(f"❌ Помилка синхронізації: {e}")

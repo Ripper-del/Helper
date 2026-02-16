@@ -1,5 +1,6 @@
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.auth.exceptions import RefreshError
 from datetime import datetime
 import os
 from database import get_db, Deadline, Coursework
@@ -107,6 +108,9 @@ def fetch_all_deadlines(refresh_token: str):
         print(f"✅ Всього знайдено {len(all_deadlines)} дедлайнів та {len(all_coursework_no_deadline)} завдань без дедлайнів")
         return all_deadlines, all_coursework_no_deadline
 
+    except RefreshError:
+        print(f"❌ Token expired or revoked for fetch_all_deadlines")
+        raise
     except Exception as e:
         print(f"❌ Ошибка при получении данных из Classroom: {e}")
         import traceback
@@ -142,6 +146,9 @@ def sync_user_deadlines(user_id: int, telegram_id: int, google_token: str):
             pageSize=100
         ).execute()
         all_courses = [course['name'] for course in courses_response.get('courses', [])]
+    except RefreshError:
+        print(f"❌ Token expired or revoked for courses list")
+        raise
     except:
         all_courses = []
 
